@@ -1,0 +1,174 @@
+#!/bin/bash
+#PRE-COMMIT HOOK
+#
+# An example hook script to check the commit log message.
+# Called by "git commit" with one argument, the name of the file
+# that has the commit message.  The hook should exit with non-zero
+# status after issuing an appropriate message if it wants to stop the
+# commit.  The hook is allowed to edit the commit message file.
+#
+# To enable this hook, rename this file to "commit-msg".
+
+# Uncomment the below to add a Signed-off-by line to the message.
+# Doing this in a hook is a bad idea in general, but the prepare-commit-msg
+# hook is more suited to it.
+#
+# SOB=$(git var GIT_AUTHOR_IDENT | sed -n 's/^\(.*>\).*$/Signed-off-by: \1/p')
+# grep -qs "^$SOB" "$1" || echo "$SOB" >> "$1"
+
+# This example catches duplicate Signed-off-by lines.
+#standard comment message info.
+
+standardInfo()
+{
+        echo "------------------------------------------------------------------------------">&2
+        echo "The correct format as:">&2
+        echo "'[Add|Fix|Opt|Task] JIRAKEY Summary' or '[Scan|Doc|Note|Conf] Summary'">&2
+        echo "------------------------------------------------------------------------------">&2
+}
+
+#Check the ISSUE_NUM is exist
+
+# Message
+MessageFile="${1}"
+# 首行
+FirstLineUpper=$(sed -n 1p "${MessageFile}" | sed 's/ *$//g' | sed 's/^ *//g' | tr '[a-z]' '[A-Z]')
+# 首行第一个字段为Commit类型
+CommitType=$(echo "${FirstLineUpper}" | awk '{print $1}')
+
+# 检查首行的第二个字段是否为JiraKey
+function JiraKeyCheck() {
+    jiraKey=$(echo "${FirstLineUpper}" | awk -F " " '{print $2}')
+    jiraKeyCount=$(echo "${jiraKey}" | grep -E "^[ |A-Z]*-[0-9]" | wc -l )
+    if [ "${jiraKeyCount}" -lt 1 ];then
+        echo -e "You must input the issue number related with your commit. \n such as"" DHOME-5678 ." >&2
+        standardInfo
+        exit 1
+    fi
+}
+
+# 检查任意行是否由 XXX 开头，且至少有两个字段
+function LineCheck() {
+    # 行数
+    lineNo=${1}
+    # 第一个字段大写
+    linePrefixUpper=${2}
+
+    lineContentUpper=$(sed -n ${lineNo}p ${MessageFile} | sed 's/ *$//g' | sed 's/^ *//g' | tr '[a-z]' '[A-Z]')
+    linePrefix=$(echo "${lineContentUpper}" | awk '{print $1}')
+    if [ "${linePrefix}" != "${linePrefixUpper}" ];then
+        echo -e "Line ${lineNo} ${linePrefix} != ${linePrefixUpper}" >&2
+        standardInfo
+        exit 1
+    fi
+
+    lineSecondField=$(echo "${lineContentUpper}" | awk -F " " '{print $2}')
+    if [ "${lineSecondField}" == "" ];then
+        echo -e "The ${linePrefix} second field is empty" >&2
+        standardInfo
+        exit 1
+    fi
+}
+
+# 需求-代码提交填写规范
+# 第1行必填: Add JIRAKEY （JIRAKEY前后都需要有空格）需求描述
+# 第2行以SOL开头填写需求是如何实现的
+function AddCheck() {
+    JiraKeyCheck
+    LineCheck 2 SOL
+}
+
+
+# 修复Bug-代码提交填写规范
+# 第1行必填: Fix JIRAKEY （JIRAKEY前后都需要有空格）缺陷描述
+# 第2行以RCA开头 描述缺陷的根因
+# 第3行以SOL开头 描述缺陷如如何解决的
+function FixCheck() {
+    JiraKeyCheck
+    LineCheck 2 RCA
+    LineCheck 3 SOL
+}
+
+# 重构/性能优化/代码优化/漏洞修复-代码提交填写规范
+# 第1行必填: Opt JIRAKEY （JIRAKEY前后都需要有空格。当没有JIRAKEY时可不填写JIRAKEY）描述
+# 第2行以SOL开头
+function OptCheck() {
+    JiraKeyCheck
+    LineCheck 2 SOL
+}
+
+# 工具扫描问题修改-代码提交填写规范
+# 第1行必填: Scan 描述
+# 第2行以SOL开头 描述问题修复
+function ScanCheck() {
+    LineCheck 1 SCAN
+    LineCheck 2 SOL
+}
+
+# 因任务修改代码-代码提交填写规范
+# 第1行必填: Task JIRAKEY （JIRAKEY前后都需要有空格）任务描述
+# 第2行以SOL开头写明任务是如何实现的
+function TaskCheck() {
+    JiraKeyCheck
+    LineCheck 2 SOL
+}
+
+# 提交文档-提交填写规范
+# 第1行必填: Doc 文档名称 修改内容描述
+function DocCheck() {
+    LineCheck 1 DOC
+}
+
+# 添加代码注释-代码提交填写规范
+# 第1行必填: Note 描述
+function NoteCheck() {
+    LineCheck 1 NOTE
+}
+
+# 修改配置文件--代码提交填写规范
+# 第1行必填: Conf JIRAKEY （JIRAKEY前后都需要有空格。当没有JIRAKEY时可不填写JIRAKEY）描述
+function ConfCheck() {
+    LineCheck 1 CONF
+}
+
+# Check the CommitType first for all check.
+Main()
+{
+    case $CommitType in
+        ADD)
+            AddCheck
+            ;;
+        FIX)
+            FixCheck
+            ;;
+        OPT)
+            OptCheck
+            ;;
+        TASK)
+            TaskCheck
+            ;;
+        SCAN)
+            ScanCheck
+            ;;
+        DOC)
+            DocCheck
+            ;;
+        NOTE)
+            NoteCheck
+            ;;
+        CONF)
+            ConfCheck
+            ;;
+        MERGE)
+            ;;
+        *) 
+            echo -e "You must input the commitType in the first line!" >&2
+            standardInfo
+            exit 1
+        ;;
+    esac
+}
+
+
+Main
+exit 0 
